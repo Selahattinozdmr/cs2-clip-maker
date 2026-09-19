@@ -18,11 +18,42 @@ import zstandard
 
 import config
 from highlight_detection.detectors import detect_all
+from highlight_detection.models import Highlight
 from highlight_detection.parser import load_demo
 from highlight_detection.scoring import merge_overlapping, select_top_n
 from logging_utils import setup_logging
 
 logger = setup_logging("detect_highlights")
+
+
+def resolve_player_filter(steamid_arg: str, name_arg: str) -> tuple[str | None, str | None]:
+    """Highlight'ları hangi oyuncuyla sınırlayacağımızı belirler.
+    Öncelik: CLI arg > .env (MY_STEAMID64/MY_PLAYER_NAME) > fetch_demos.py'nin FACEIT için
+    cache'lediği kimlik (data/faceit_player.json) > hiçbiri (o zaman TÜM oyuncular dahil edilir)."""
+    steamid = steamid_arg or config.MY_STEAMID64
+    name = name_arg or config.MY_PLAYER_NAME
+    if steamid or name:
+        return steamid or None, name or None
+
+    if config.FACEIT_IDENTITY_CACHE_FILE.exists():
+        try:
+            cached = json.loads(config.FACEIT_IDENTITY_CACHE_FILE.read_text(encoding="utf-8"))
+            if cached.get("steam_id64"):
+                logger.info("Oyuncu filtresi FACEIT cache'inden alındı: %s (steam_id64=%s)", cached.get("nickname"), cached["steam_id64"])
+                return str(cached["steam_id64"]), None
+        except Exception:
+            logger.warning("data/faceit_player.json okunamadı, filtre uygulanmayacak.")
+
+    return None, None
+
+
+def filter_by_player(highlights: list[Highlight], steamid: str | None, name: str | None) -> list[Highlight]:
+    if not steamid and not name:
+        return highlights
+    if steamid:
+        return [h for h in highlights if h.player_steamid == str(steamid)]
+    name_lower = name.lower()
+    return [h for h in highlights if h.player_name.lower() == name_lower]
 
 
 def resolve_demo_path(path: Path) -> Path:
@@ -49,14 +80,20 @@ def resolve_demo_path(path: Path) -> Path:
     return decompressed
 
 
-def process_demo(path: Path, top_n: int, pre_s: float, post_s: float) -> list[dict]:
+def process_demo(
+    path: Path, top_n: int, pre_s: float, post_s: float, player_steamid: str | None, player_name: str | None
+) -> list[dict]:
     demo_path = resolve_demo_path(path)
     demo = load_demo(str(demo_path))
 
     highlights = detect_all(demo, config.CS2_TICKRATE, pre_s, post_s)
-    logger.info("%s: birleştirme öncesi %d ham highlight.", path.name, len(highlights))
+    logger.info("%s: birleştirme öncesi %d ham highlight (tüm oyuncular).", path.name, len(highlights))
     highlights = merge_overlapping(highlights)
-    logger.info("%s: birleştirme sonrası %d highlight.", path.name, len(highlights))
+
+    highlights = filter_by_player(highlights, player_steamid, player_name)
+    if player_steamid or player_name:
+        logger.info("%s: oyuncu filtresi sonrası %d highlight (steamid=%s, name=%s).", path.name, len(highlights), player_steamid, player_name)
+
     top = select_top_n(highlights, top_n)
     logger.info("%s: en iyi %d highlight seçildi.", path.name, len(top))
 
@@ -71,7 +108,17 @@ def main() -> int:
     parser.add_argument("--top-n", type=int, default=config.DEFAULT_TOP_N)
     parser.add_argument("--pre-seconds", type=float, default=config.HIGHLIGHT_PRE_SECONDS)
     parser.add_argument("--post-seconds", type=float, default=config.HIGHLIGHT_POST_SECONDS)
+    parser.add_argument("--player-steamid", default="", help="Sadece bu steamid64'e ait highlight'ları tut")
+    parser.add_argument("--player-name", default="", help="Sadece bu oyuncu adına ait highlight'ları tut")
     args = parser.parse_args()
+
+    player_steamid, player_name = resolve_player_filter(args.player_steamid, args.player_name)
+    if not player_steamid and not player_name:
+        logger.warning(
+            "Oyuncu filtresi yok: demodaki TÜM oyuncuların (rakipler dahil) highlight'ları tespit edilecek. "
+            "Sadece kendi highlight'larını almak için --player-steamid/--player-name kullan ya da "
+            ".env içine MY_STEAMID64/MY_PLAYER_NAME ekle."
+        )
 
     if args.demo:
         demo_paths = [args.demo]
@@ -92,7 +139,9 @@ def main() -> int:
     total_highlights = 0
     for demo_path in demo_paths:
         try:
-            highlights = process_demo(demo_path, args.top_n, args.pre_seconds, args.post_seconds)
+            highlights = process_demo(
+                demo_path, args.top_n, args.pre_seconds, args.post_seconds, player_steamid, player_name
+            )
         except Exception:
             logger.exception("Demo işlenirken hata oluştu: %s", demo_path)
             continue

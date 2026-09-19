@@ -13,6 +13,7 @@ Notlar (docs.faceit.com'dan doğrulandı):
 from __future__ import annotations
 
 import gzip
+import json
 import shutil
 import tempfile
 from datetime import datetime, timezone
@@ -49,19 +50,40 @@ class FaceitSource(DemoSource):
 
     # --- Data API ---
 
-    def resolve_player_id(self) -> str:
+    def resolve_identity(self) -> dict:
+        """Oyuncuyu bulur ve player_id + steam_id64 + nickname'i data/faceit_player.json'a
+        cache'ler; böylece detect_highlights.py hangi highlight'ların "senin" olduğunu
+        (steamid üzerinden) otomatik bilebilir."""
         if config.FACEIT_PLAYER_ID:
-            return config.FACEIT_PLAYER_ID
-        if not config.FACEIT_PLAYER_NICKNAME:
+            resp = self.session.get(f"{config.FACEIT_API_BASE}/players/{config.FACEIT_PLAYER_ID}")
+        elif config.FACEIT_PLAYER_NICKNAME:
+            resp = self.session.get(
+                f"{config.FACEIT_API_BASE}/players",
+                params={"nickname": config.FACEIT_PLAYER_NICKNAME, "game": config.FACEIT_GAME_ID},
+            )
+        else:
             raise FaceitConfigError("FACEIT_PLAYER_ID veya FACEIT_PLAYER_NICKNAME .env'de tanımlı olmalı.")
-        resp = self.session.get(
-            f"{config.FACEIT_API_BASE}/players",
-            params={"nickname": config.FACEIT_PLAYER_NICKNAME, "game": config.FACEIT_GAME_ID},
-        )
         resp.raise_for_status()
-        player_id = resp.json()["player_id"]
-        logger.info("Oyuncu bulundu: %s -> player_id=%s", config.FACEIT_PLAYER_NICKNAME, player_id)
-        return player_id
+        player = resp.json()
+
+        identity = {
+            "player_id": player["player_id"],
+            "nickname": player.get("nickname"),
+            "steam_id64": player.get("steam_id_64") or player.get("games", {}).get(config.FACEIT_GAME_ID, {}).get("game_player_id"),
+        }
+        config.FACEIT_IDENTITY_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        config.FACEIT_IDENTITY_CACHE_FILE.write_text(json.dumps(identity, ensure_ascii=False, indent=2), encoding="utf-8")
+        logger.info(
+            "Oyuncu bulundu: %s -> player_id=%s, steam_id64=%s (cache: %s)",
+            identity["nickname"],
+            identity["player_id"],
+            identity["steam_id64"],
+            config.FACEIT_IDENTITY_CACHE_FILE,
+        )
+        return identity
+
+    def resolve_player_id(self) -> str:
+        return self.resolve_identity()["player_id"]
 
     def list_recent_matches(self, player_id: str, limit: int) -> list[dict]:
         resp = self.session.get(

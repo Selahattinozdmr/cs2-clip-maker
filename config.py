@@ -38,6 +38,13 @@ FACEIT_DOWNLOADS_API_TOKEN = os.getenv("FACEIT_DOWNLOADS_API_TOKEN", "")
 FACEIT_PLAYER_NICKNAME = os.getenv("FACEIT_PLAYER_NICKNAME", "")
 FACEIT_PLAYER_ID = os.getenv("FACEIT_PLAYER_ID", "")
 FACEIT_GAME_ID = os.getenv("FACEIT_GAME_ID", "cs2")
+FACEIT_IDENTITY_CACHE_FILE = DATA_DIR / "faceit_player.json"
+
+# --- Highlight'ları belirli bir oyuncuyla sınırlama (Faz 2) ---
+# Doldurulmazsa detect_highlights.py demodaki HERKESİN (rakipler dahil) highlight'larını
+# tespit eder. Steamid, isimden daha güvenilirdir (isim demo başına değişebilir).
+MY_STEAMID64 = os.getenv("MY_STEAMID64", "")
+MY_PLAYER_NAME = os.getenv("MY_PLAYER_NAME", "")
 
 # --- Steam (Faz 1 - deneysel) ---
 STEAM_USERNAME = os.getenv("STEAM_USERNAME", "")

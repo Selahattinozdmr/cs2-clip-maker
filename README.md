@@ -79,6 +79,16 @@ python detect_highlights.py "/path/to/demo.dem.zst" --top-n 10
 
 Tespit edilen highlight tipleri: `ace`, `4k`, `3k`, `clutch_1v1`..`clutch_1v5`, `knife_kill`, `noscope_kill`, `wallbang_kill`, `headshot_solo`. Aynı round+oyuncu+çakışan tick aralığındaki tespitler otomatik birleştirilir (örn. bir ace aynı zamanda 1v4 clutch de olabilir).
 
+**Önemli — hangi oyuncunun highlight'ları?** Varsayılan olarak `detect_highlights.py` demodaki **10 oyuncunun da** (rakipler dahil) highlight'larını tespit eder ve en yüksek skorluları seçer; filtre vermezsen çıktıda kendi highlight'ların olmayabilir (log'da bunun için bir uyarı basılır). Sadece kendi highlight'larını almak için:
+
+```bash
+python detect_highlights.py demo.dem --player-name "faceit_nickin"
+# veya (daha güvenilir, isim demo başına değişebilir)
+python detect_highlights.py demo.dem --player-steamid 76561198xxxxxxxxx
+```
+
+Steamid64'ünü FACEIT profilinden ya da Steam profil URL'ini [steamid.io](https://steamid.io)'ya yapıştırarak bulabilirsin. `.env` içine `MY_STEAMID64` veya `MY_PLAYER_NAME` eklersen her çalıştırmada bu flag'leri tekrar yazmana gerek kalmaz. Ayrıca `fetch_demos.py --source faceit` bir kez çalışıp oyuncunu bulduğunda steamid64'ünü otomatik olarak `data/faceit_player.json`'a cache'ler ve `detect_highlights.py` (başka bir şey verilmemişse) bunu otomatik kullanır.
+
 Klasördeki tüm demoları toplu işlemek için:
 
 ```bash
