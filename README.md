@@ -8,10 +8,10 @@ CS2 maçlarından otomatik highlight (kill/clutch/ace) tespiti ve klip üretimi 
 |---|---|---|
 | 1 | Demo çekme — FACEIT | ✅ Kod hazır, gerçek API key ile test edilmedi |
 | 1 | Demo çekme — Steam/GCPD | ⛔ İskelet var, implemente edilmedi ([sources/steam.py](sources/steam.py)) |
-| 2 | Highlight tespiti (`demoparser2`) | ✅ Kod hazır, elimizdeki örnek demo ile test edilecek |
-| 3 | OBS/CS2 ile klip render | ⏳ Sırada |
-| 4 | ffmpeg post-processing | ⏳ Sırada |
-| 5 | TikTok/IG/YouTube paylaşım | ⏳ Sırada |
+| 2 | Highlight tespiti (`demoparser2`) | ✅ Gerçek bir FACEIT demosuyla test edildi, doğru sonuç veriyor |
+| 3 | OBS/CS2 ile klip render | ⚠️ Kod hazır, CS2/OBS bu makinede yok - **test edilmedi** |
+| 4 | ffmpeg post-processing (dikey format, metin, ses) | ✅ Sentetik test videosuyla uçtan uca test edildi |
+| 5 | TikTok/IG/YouTube paylaşım + Telegram onayı | ⚠️ Kod hazır, gerçek API kimlik bilgisi olmadan **test edilmedi** |
 
 ## Kurulum
 
@@ -61,21 +61,26 @@ python detect_highlights.py "/path/to/demo.dem.zst" --top-n 10
 
 ```json
 {
-  "demo_dosya_adi": [
-    {
-      "types": ["ace"],
-      "player_name": "...",
-      "player_steamid": "...",
-      "round_number": 7,
-      "start_tick": 12345,
-      "end_tick": 13000,
-      "score": 100,
-      "weapons": ["ak47"],
-      "meta": {"kill_count": 5}
-    }
-  ]
+  "demo_dosya_adi": {
+    "demo_path": "/mutlak/yol/demo.dem",
+    "highlights": [
+      {
+        "types": ["ace"],
+        "player_name": "...",
+        "player_steamid": "...",
+        "round_number": 7,
+        "start_tick": 12345,
+        "end_tick": 13000,
+        "score": 100,
+        "weapons": ["ak47"],
+        "meta": {"kill_count": 5}
+      }
+    ]
+  }
 }
 ```
+
+`demo_path` Faz 3'ün (render_highlights.py) hangi dosyayı CS2'de açacağını bilmesi için saklanır.
 
 Tespit edilen highlight tipleri: `ace`, `4k`, `3k`, `clutch_1v1`..`clutch_1v5`, `knife_kill`, `noscope_kill`, `wallbang_kill`, `headshot_solo`. Aynı round+oyuncu+çakışan tick aralığındaki tespitler otomatik birleştirilir (örn. bir ace aynı zamanda 1v4 clutch de olabilir).
 
@@ -95,9 +100,65 @@ Klasördeki tüm demoları toplu işlemek için:
 python detect_highlights.py --input-dir demos --top-n 10
 ```
 
+### Faz 3 — CS2 + OBS ile klip render
+
+**⚠️ Bu makinede CS2/OBS kurulu olmadığı için bu faz test EDİLEMEDİ.** CS2'nin kurulu olduğu makinede dikkatli doğrula.
+
+**Önemli kısıt (araştırılıp doğrulandı):** CS2'ye komut göndermenin (playdemo, demo_gototick vb.) iki adayı vardı: netcon ve GSI. GSI **tek yönlüdür** (oyun -> dışarı), komut gönderemez; bu yüzden kullanılamaz. Netcon (`-netconport`) ise CS2'de **sadece `-tools` (Counter-Strike 2 Workshop Tools) ile birlikte çalışıyor** ve bu araç yalnızca Windows'ta, Steam'den ayrıca kurulduğunda kullanılabilir (kaynak: [CS Demo Manager'ın resmi geliştirici dokümantasyonu](https://cs-demo-manager.com/docs/development/cs-server-plugin) — kendileri de tam bu sebeple CS2 için netcon yerine özel bir native plugin yazmak zorunda kalmışlar). Bu projede native plugin yazmak kapsam dışı olduğundan **netcon + Workshop Tools** kullanılıyor; bu da tek pratik seçenek.
+
+Kurulum:
+1. Steam kütüphanesinden **"Counter-Strike 2 Workshop Tools"**'u kur (Araçlar kategorisinde).
+2. Steam -> CS2 -> Özellikler -> Başlatma Seçenekleri: `-tools -netconport 2121 -insecure`
+   (`-insecure` VAC'ı kapatır — sadece kendi demolarını izlemek için kullan, resmi maça bu seçeneklerle girme.)
+3. OBS Studio'da: Tools -> WebSocket Server Settings -> "Enable WebSocket server", port/parolayı `.env`'e yaz.
+4. OBS'te CS2 penceresini yakalayan bir Game/Display Capture içeren bir sahneyi aktif et (script sahne seçmez).
+5. CS2'yi aç, bir demo klasörünün göründüğünden emin ol.
+
+```bash
+python render_highlights.py                # highlights.json'daki her demoyu render eder
+python render_highlights.py --demo <stem>   # sadece belirli bir demoyu render eder
+```
+
+Her klip `output/renders/` altına, yanında highlight metadata'sını taşıyan bir `.json` sidecar dosyasıyla kaydedilir (Faz 4 bunu kullanır). `CS2_DEMO_LOAD_WAIT_SECONDS` (varsayılan 5s) demonun diskten yüklenme süresine göre ayarlanmalı — Faz 2'nin tick aralıklarına eklediği ~6.5s/~2.5s pre/post-roll payı da bu senkronizasyondaki küçük kaymalara tolerans sağlıyor.
+
+### Faz 4 — Post-processing (ffmpeg)
+
+CS2/OBS gerektirmez, sentetik bir test videosuyla uçtan uca doğrulandı (1080x1920, h264/aac çıktı doğru üretiliyor).
+
+```bash
+python postprocess.py --input-dir output/renders --mode blur   # blur arka plan (varsayılan)
+python postprocess.py --input-dir output/renders --mode crop   # basit ortadan kırpma
+python postprocess.py bir_klip.mp4                              # tek dosya
+```
+
+Çıktılar `output/ready/` altına `{isim}_ready.mp4` olarak yazılır: 9:16, `loudnorm` ile ses normalizasyonu yapılmış, oynatılabilirlik için `+faststart`. Oyuncu adı + highlight tipi metni (`.json` sidecar varsa) `drawtext` ile bindirilir; `--no-text` ile kapatılabilir. **Not:** bazı ffmpeg build'lerinde (bu geliştirme makinesindeki Homebrew ffmpeg dahil) `drawtext` filtresi derlenmemiş olabilir — bu durumda kod otomatik olarak metinsiz tekrar dener ve uyarı loglar; `ffmpeg -filters | grep drawtext` ile kontrol edebilirsin, yoksa fontconfig/freetype destekli bir ffmpeg kurman gerekir.
+
+### Faz 5 — Paylaşım (TikTok / Instagram / YouTube + Telegram onayı)
+
+**⚠️ Gerçek API kimlik bilgileri (OAuth token'lar) olmadan bu faz test EDİLEMEDİ.**
+
+**Zorunlu onay adımı:** `publish_highlights.py`, her klibi önce Telegram botuna gönderir ve sen "evet" yazmadan hiçbir platforma yayın yapmaz (`--skip-approval` ile bilerek atlanabilir ama önerilmez — kötü/yanlış bir klibin otomatik gitmesini engellemek için var).
+
+Kurulum (her platform bağımsız, sadece kullanacaklarını yapılandır):
+
+- **Telegram:** [@BotFather](https://t.me/BotFather)'dan bot oluştur, botla bir DM başlat, `https://api.telegram.org/bot<TOKEN>/getUpdates` ile kendi `chat_id`'ni bul. `.env`: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`.
+- **TikTok:** [developers.tiktok.com](https://developers.tiktok.com)'da app oluştur, "Content Posting API" ürününü ekle, `video.publish` scope'u iste, redirect URI = `http://localhost:8721/callback`. `.env`'e `TIKTOK_CLIENT_KEY`/`TIKTOK_CLIENT_SECRET` yaz, sonra bir kere `python tiktok_auth.py` çalıştır. **Not:** TikTok, "audit" edilmemiş app'lerin paylaşımlarını otomatik olarak SELF_ONLY (sana özel) yapar — bu TikTok'un platform kısıtı.
+- **Instagram:** Instagram hesabın **Business ya da Creator** tipinde olmalı ve bir **Facebook Sayfası'na bağlı** olmalı. `instagram_content_publish` izinli uzun ömürlü bir access token üret (Meta Graph API Explorer). `.env`: `INSTAGRAM_ACCESS_TOKEN`, `INSTAGRAM_IG_USER_ID`. **Kısıt:** Instagram Graph API dosya upload etmiyor, sadece herkese açık bir URL'den video çekiyor — yani `publish()` çağrısına klibi önce bir yere host'layıp `video_url=...` vermen gerekiyor.
+- **YouTube:** [Google Cloud Console](https://console.cloud.google.com)'da proje aç, "YouTube Data API v3"'ü etkinleştir, OAuth client oluştur (tip: **Desktop app**), `youtube.upload` scope'u. İndirilen JSON'u `data/youtube_client_secret.json`'a koy. İlk çalıştırmada tarayıcı açılıp izin ister, sonrasında token `data/youtube_token.json`'da cache'lenir. Dikey+kısa videolar YouTube tarafından otomatik Shorts sayılır; açıklamaya eklenen `#Shorts` etiketi keşfedilebilirliği artırır.
+
+```bash
+python publish_highlights.py --platforms youtube
+python publish_highlights.py --platforms tiktok,youtube
+```
+
+Üç platform da ortak `Publisher.publish(video_path, title, description)` arayüzünü ([publish/base.py](publish/base.py)) implemente ediyor; yeni bir platform eklemek için aynı arayüzü implemente eden bir sınıf yazıp `publish_highlights.py`'deki `_load_publisher`'a eklemek yeterli.
+
 ## Mimari notları
 
 - Tüm gizli bilgiler `.env`'de (`.gitignore`'da), koda gömülmez.
 - `demoparser2` alan adları [LaihoE/demoparser](https://github.com/LaihoE/demoparser) README/documentation/examples'tan doğrulandı (özellikle `examples/1vX/main.py` clutch tespiti mantığının temeli).
 - CS2 sunucuları sabit 64 tick çalışır (`config.CS2_TICKRATE`).
 - `noscope`/`penetrated` gibi bazı event alanları `demoparser2` sürümüne göre olmayabilir; kod bunları `if col in df.columns` ile kontrol ederek düşer, hata vermez.
+- OBS kontrolü [obsws-python](https://github.com/aatikturk/obsws-python) (OBS WebSocket v5 protokolü) ile yapılıyor.
+- TikTok/Instagram/YouTube entegrasyonları resmi API dokümantasyonlarından doğrulandı: [TikTok Direct Post](https://developers.tiktok.com/doc/content-posting-api-reference-direct-post), [Instagram Content Publishing](https://developers.facebook.com/docs/instagram-platform/content-publishing/), [YouTube Data API v3](https://developers.google.com/youtube/v3/docs/videos/insert).
+- Faz 3-5 CS2/OBS/gerçek API kimlik bilgisi gerektirdiğinden bu geliştirme ortamında (CS2/OBS yok) uçtan uca test edilemedi - Faz 1 (FACEIT gerçek key ile) ve Faz 3/5 kullanıcı tarafında ilk kullanımda dikkatli doğrulanmalı.

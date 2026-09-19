@@ -13,4 +13,8 @@ output/*
 !output/.gitkeep
 logs/*
 !logs/.gitkeep
-data/processed_matches.json
+
+# OAuth token'ları ve maç kayıtları gibi hassas/üretilen veriler (tiktok_token.json,
+# youtube_token.json, youtube_client_secret.json, faceit_player.json, processed_matches.json)
+data/*
+!data/.gitkeep

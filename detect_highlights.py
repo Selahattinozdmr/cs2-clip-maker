@@ -82,7 +82,7 @@ def resolve_demo_path(path: Path) -> Path:
 
 def process_demo(
     path: Path, top_n: int, pre_s: float, post_s: float, player_steamid: str | None, player_name: str | None
-) -> list[dict]:
+) -> dict:
     demo_path = resolve_demo_path(path)
     demo = load_demo(str(demo_path))
 
@@ -97,7 +97,8 @@ def process_demo(
     top = select_top_n(highlights, top_n)
     logger.info("%s: en iyi %d highlight seçildi.", path.name, len(top))
 
-    return [h.to_dict() for h in top]
+    # demo_path Faz 3'ün (render_highlights.py) hangi dosyayı CS2'de açacağını bilmesi için saklanır.
+    return {"demo_path": str(demo_path.resolve()), "highlights": [h.to_dict() for h in top]}
 
 
 def main() -> int:
@@ -139,14 +140,14 @@ def main() -> int:
     total_highlights = 0
     for demo_path in demo_paths:
         try:
-            highlights = process_demo(
+            entry = process_demo(
                 demo_path, args.top_n, args.pre_seconds, args.post_seconds, player_steamid, player_name
             )
         except Exception:
             logger.exception("Demo işlenirken hata oluştu: %s", demo_path)
             continue
-        results[demo_path.stem] = highlights
-        total_highlights += len(highlights)
+        results[demo_path.stem] = entry
+        total_highlights += len(entry["highlights"])
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8")
