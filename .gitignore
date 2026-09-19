@@ -1,0 +1,16 @@
+.env
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# İndirilen/decompress edilen demolar ve üretilen çıktılar commit edilmesin
+demos/*.dem
+demos/*.dem.zst
+demos/*.dem.gz
+!demos/.gitkeep
+output/*
+!output/.gitkeep
+logs/*
+!logs/.gitkeep
+data/processed_matches.json

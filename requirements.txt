@@ -1,0 +1,5 @@
+demoparser2>=0.1.11
+pandas>=2.0
+python-dotenv>=1.0
+requests>=2.31
+zstandard>=0.22
