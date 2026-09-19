@@ -3,6 +3,7 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+.pytest_cache/
 
 # İndirilen/decompress edilen demolar ve üretilen çıktılar commit edilmesin
 demos/*.dem

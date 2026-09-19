@@ -37,6 +37,15 @@ cp .env.example .env
 - `FACEIT_API_KEY`: https://developers.faceit.com üzerinden bir "uygulama" oluşturup server-side API key üret.
 - `FACEIT_PLAYER_NICKNAME`: FACEIT kullanıcı adın.
 
+### 3. Kurulumu doğrula
+
+```bash
+python check_setup.py          # yerel kontroller: .env, ffmpeg, hangi anahtarlar dolu
+python check_setup.py --live   # + gerçek bağlantılar: FACEIT API, CS2 netcon, OBS WebSocket
+```
+
+Her faz için ayrı ayrı ✅/⚠️/❌ raporu verir - CS2 makinende ilk kurulumda "neden çalışmıyor" diye tek tek debug etmek yerine tek komutla nerede takıldığını görebilirsin.
+
 **Önemli — FACEIT demo indirme kısıtı:** FACEIT Data API'den maç detayında `demo_url` alanını almak serbest, ama gerçek dosyayı indirmek için **ayrı bir "Downloads API" erişimi** gerekiyor. Bu erişim [fce.gg/downloads-api-application](https://fce.gg/downloads-api-application) adresinden başvuru gerektiriyor ve yanıt ~30 gün sürebiliyor. Token gelene kadar `fetch_demos.py --source faceit` maç listesini/URL'lerini loglar ama dosyayı indiremez — o ana kadar demoyu maç odasından elle indirmeye devam edebilirsin (tıpkı şu an yaptığın gibi). Token onaylanınca `FACEIT_DOWNLOADS_API_TOKEN` değişkenine eklemen yeterli.
 
 ## Kullanım
@@ -168,6 +177,17 @@ python publish_highlights.py --platforms tiktok,youtube
 ```
 
 Üç platform da ortak `Publisher.publish(video_path, title, description)` arayüzünü ([publish/base.py](publish/base.py)) implemente ediyor; yeni bir platform eklemek için aynı arayüzü implemente eden bir sınıf yazıp `publish_highlights.py`'deki `_load_publisher`'a eklemek yeterli.
+
+## Testler
+
+Highlight tespiti mantığı (round hizalama, skor birleştirme, ace/clutch/knife tespiti) demoparser2/CS2/dosya gerektirmeyen, sentetik pandas DataFrame'lerle çalışan pytest testleriyle kapsanıyor:
+
+```bash
+pip install -r requirements-dev.txt
+pytest tests/ -v
+```
+
+`tests/test_parser_rounds.py` ve `tests/test_scoring.py`, geliştirme sırasında gerçek demoda bulunup düzeltilen iki gerçek bug'ı (round_end listesindeki geçersiz baş kayıt yüzünden kayan round numaraları; çakışan highlight'lar birleşirken skor bonusunun tekrar tekrar eklenmesi) regresyon testi olarak sabitliyor.
 
 ## Mimari notları
 

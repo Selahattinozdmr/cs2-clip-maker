@@ -42,36 +42,52 @@ class DemoData:
         return len(self.round_ends)
 
 
+def clean_round_ends(round_ends: pd.DataFrame) -> pd.DataFrame:
+    """Geçersiz (maç başlamadan/teknik tetiklenen, winner CT/T olmayan) kayıtları atar,
+    tick'e göre sıralayıp 0-based round_number atar. Saf fonksiyon - demoparser2'ye bağımlı
+    değil, birim testlerinde sentetik DataFrame ile çağrılabilir."""
+    cleaned = round_ends[round_ends["winner"].isin(["CT", "T"])]
+    cleaned = cleaned.sort_values("tick").reset_index(drop=True)
+    cleaned["round_number"] = cleaned.index
+    return cleaned
+
+
+def filter_deaths(deaths: pd.DataFrame) -> pd.DataFrame:
+    """Dünyaya/kendine ölümleri (fall damage, world), warmup'ı ve takım arkadaşı
+    öldürmelerini eler. Saf fonksiyon."""
+    filtered = deaths[deaths["attacker_steamid"].notna()]
+    if "is_warmup_period" in filtered.columns:
+        filtered = filtered[filtered["is_warmup_period"] == False]  # noqa: E712
+    if "attacker_team_name" in filtered.columns and "user_team_name" in filtered.columns:
+        filtered = filtered[filtered["attacker_team_name"] != filtered["user_team_name"]]
+    return filtered
+
+
+def assign_round_numbers(deaths: pd.DataFrame, round_ends: pd.DataFrame) -> pd.DataFrame:
+    """Her ölümü, tick'inin ait olduğu round'a atar: o tick'ten sonraki ilk (temizlenmiş)
+    round_end. Hiçbir geçerli round_end'e denk gelmeyen (son geçerli round'dan sonraki)
+    ölümler atılır. Saf fonksiyon."""
+    boundaries = round_ends["tick"].to_numpy()
+    round_idx = np.searchsorted(boundaries, deaths["tick"].to_numpy(), side="left")
+    assigned = deaths.assign(round_number=round_idx)
+    assigned = assigned[assigned["round_number"] < len(round_ends)]
+    return assigned.reset_index(drop=True)
+
+
 def load_demo(path: str) -> DemoData:
     logger.info("Demo yükleniyor: %s", path)
     parser = DemoParser(path)
     header = parser.parse_header()
 
-    round_ends = parser.parse_event("round_end")
-    # Maç başlamadan/teknik olarak tetiklenen geçersiz kayıtları (winner CT/T değilse) at.
-    round_ends = round_ends[round_ends["winner"].isin(["CT", "T"])]
-    round_ends = round_ends.sort_values("tick").reset_index(drop=True)
-    round_ends["round_number"] = round_ends.index
+    round_ends = clean_round_ends(parser.parse_event("round_end"))
 
     deaths = parser.parse_event(
         "player_death",
         player=["team_name"],
         other=["is_warmup_period"],
     )
-    # Dünyaya/kendine ölümleri (fall damage, world) ve takım arkadaşı öldürmelerini ele.
-    deaths = deaths[deaths["attacker_steamid"].notna()]
-    if "is_warmup_period" in deaths.columns:
-        deaths = deaths[deaths["is_warmup_period"] == False]  # noqa: E712
-    if "attacker_team_name" in deaths.columns and "user_team_name" in deaths.columns:
-        deaths = deaths[deaths["attacker_team_name"] != deaths["user_team_name"]]
-
-    # Her ölümü, tick'inin ait olduğu round'a ata: o tick'ten sonraki ilk round_end.
-    boundaries = round_ends["tick"].to_numpy()
-    round_idx = np.searchsorted(boundaries, deaths["tick"].to_numpy(), side="left")
-    deaths = deaths.assign(round_number=round_idx)
-    # round sonrası kalan (hiçbir geçerli round_end'e denk gelmeyen) ölümleri at.
-    deaths = deaths[deaths["round_number"] < len(round_ends)]
-    deaths = deaths.reset_index(drop=True)
+    deaths = filter_deaths(deaths)
+    deaths = assign_round_numbers(deaths, round_ends)
 
     try:
         bomb_planted = parser.parse_event("bomb_planted")
