@@ -133,6 +133,22 @@ python postprocess.py bir_klip.mp4                              # tek dosya
 
 Çıktılar `output/ready/` altına `{isim}_ready.mp4` olarak yazılır: 9:16, `loudnorm` ile ses normalizasyonu yapılmış, oynatılabilirlik için `+faststart`. Oyuncu adı + highlight tipi metni (`.json` sidecar varsa) `drawtext` ile bindirilir; `--no-text` ile kapatılabilir. **Not:** bazı ffmpeg build'lerinde (bu geliştirme makinesindeki Homebrew ffmpeg dahil) `drawtext` filtresi derlenmemiş olabilir — bu durumda kod otomatik olarak metinsiz tekrar dener ve uyarı loglar; `ffmpeg -filters | grep drawtext` ile kontrol edebilirsin, yoksa fontconfig/freetype destekli bir ffmpeg kurman gerekir.
 
+#### Trend telifsiz müzik ekleme
+
+```bash
+python postprocess.py --music                          # oyun sesinin altına müzik ekler (mix, varsayılan)
+python postprocess.py --music --music-mode replace      # sesi tamamen müzikle değiştirir
+python postprocess.py --music --music-tags "gaming,electronic" --music-order popularity_month
+```
+
+Müzik [Jamendo API](https://developer.jamendo.com/v3.0/tracks)'den geliyor: `order=popularity_week/month/total` ile "trend" (en popüler) parçalar seçiliyor, `ccnc=false`+`ccnd=false` filtreleriyle sadece **ticari kullanıma ve türetmeye izin veren** (CC-BY/CC-BY-SA) lisanslı, indirilebilir parçalar alınıyor. Ücretsiz bir `JAMENDO_CLIENT_ID` gerekiyor ([devportal.jamendo.com](https://devportal.jamendo.com)'da kayıt, anında verilir).
+
+**Atıf notu — "telifsiz" atıfsız demek değildir:** Jamendo'daki parçaların neredeyse tamamı Creative Commons lisanslıdır ve sanatçıya kredi verilmesini şart koşar. Müzik eklenen her klip için yanına `{isim}_ready.mp4.attribution.txt` dosyası yazılır (örn. `Music: "..." by ... via Jamendo (https://...)`) — bunu video açıklamasına eklemen hem yasal olarak doğru hem de saygılı olur. `publish_highlights.py` bu dosyayı bulursa otomatik olarak açıklamaya ekler.
+
+Mix modunda mp3, klip süresine göre kırpılır (`--music-volume` ile oyun sesine göre seviyesi ayarlanır, varsayılan 0.25); replace modunda ise sesin tamamen yerine geçer. Müzik `data/music_cache/` altında ID'sine göre cache'lenir, aynı parça tekrar indirilmez.
+
+**Test durumu:** ffmpeg mix/replace mantığı iki farklı frekanslı sentetik ton ile (bandpass+volumedetect ölçümüyle) doğrulandı — mix modunda her iki ses de doğru seviyelerde bir arada, replace modunda sadece müzik var. Gerçek Jamendo API çağrısı (indirme) `JAMENDO_CLIENT_ID` olmadığı için bu ortamda test edilemedi.
+
 ### Faz 5 — Paylaşım (TikTok / Instagram / YouTube + Telegram onayı)
 
 **⚠️ Gerçek API kimlik bilgileri (OAuth token'lar) olmadan bu faz test EDİLEMEDİ.**

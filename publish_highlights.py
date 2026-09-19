@@ -86,6 +86,10 @@ def main() -> int:
             meta = json.loads(raw_sidecar.read_text(encoding="utf-8"))
         title, description = build_title_description(meta)
 
+        attribution_file = clip.with_suffix(clip.suffix + ".attribution.txt")
+        if attribution_file.exists():
+            description = f"{description}\n\n{attribution_file.read_text(encoding='utf-8').strip()}"
+
         if approver:
             approver.send_for_approval(clip, f"{title}\n\n{description}\n\nOnaylamak için 'evet', reddetmek için 'hayır' yaz.")
             if not approver.wait_for_approval():

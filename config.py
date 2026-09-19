@@ -72,6 +72,12 @@ OBS_WEBSOCKET_PASSWORD = os.getenv("OBS_WEBSOCKET_PASSWORD", "")
 # bulunamayabilir; gerekirse buraya tam bir .ttf yolu ver (örn. C:/Windows/Fonts/arial.ttf).
 FFMPEG_FONT_FILE = os.getenv("FFMPEG_FONT_FILE", "")
 
+# --- Trend telifsiz müzik (Jamendo) ---
+JAMENDO_CLIENT_ID = os.getenv("JAMENDO_CLIENT_ID", "")
+MUSIC_TAGS = os.getenv("MUSIC_TAGS", "electronic,energetic")
+MUSIC_ORDER = os.getenv("MUSIC_ORDER", "popularity_week")  # "trend" = haftalık popülerlik
+MUSIC_VOLUME = _float("MUSIC_VOLUME", 0.25)  # oyun sesine göre müzik seviyesi (mix modunda)
+
 # --- Paylaşım (Faz 5) ---
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
