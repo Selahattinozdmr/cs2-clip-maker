@@ -1,0 +1,20 @@
+name: whyer review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Send PR diff to whyer for review
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./scripts/review-pr.sh "${{ github.repository }}" "${{ github.event.pull_request.number }}"
